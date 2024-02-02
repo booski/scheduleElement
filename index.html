@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Schedule Element Demo</title>
+    <style>
+      schedule-element {
+	  resize: both;
+	  overflow: auto;
+	  height: 600px;
+	  width: 800px;
+      }
+    </style>
+    <script type="text/JavaScript" defer>
+      (function() {
+	  var colorIndex = 0;
+	  const colors = ["red", "yellow", "green", "blue", "cyan", "teal", "gray"];
+	  colors.getNext = function nextColor() {
+	      const color = this[colorIndex++]
+	      if(colorIndex > this.length) {
+		  colorIndex = 0;
+	      }
+	      return color;
+	  }
+
+	  /*
+	   * bounds must contain the fields: left, width, top and height
+	   */
+	  function placeElement(element, bounds, zIndex = 0) {
+	      element.style.position = "absolute";
+	      element.style.boxSizing = "border-box";
+	      element.style.left = bounds.left + "px";
+	      element.style.width = bounds.width + "px";
+	      element.style.top = bounds.top + "px";
+	      element.style.height = bounds.height + "px";
+	      //element.style.zIndex = zIndex;
+	  }
+
+	  function drawRoom(room, columnTimeRange, bounds) {
+	      placeElement(room, bounds);
+	      const bookings = room.querySelectorAll("booking");
+	      const maxWidth = bounds.width;
+	      const maxHeight = bounds.height;
+	      const maxTime = columnTimeRange.end - columnTimeRange.start;
+	      const minuteHeight = maxHeight / maxTime;
+	      const baseBookingOffset = 2;
+	      const baseBookingWidth = maxWidth - 4;
+	      const passedBookings = [];
+
+	      bookings.forEach((booking) => {
+		  const bookingTimeRange = getTimeRange(booking);
+		  const adjustedStartTime = Math.max(0, bookingTimeRange.start - columnTimeRange.start);
+		  const adjustedEndTime = Math.min(bookingTimeRange.end - columnTimeRange.start,
+						   columnTimeRange.end);
+		  const startPosition = minuteHeight * adjustedStartTime;
+		  const endPosition = minuteHeight * adjustedEndTime;
+		  const bookingHeight = endPosition - startPosition;
+
+		  var thisBookingOffset = baseBookingOffset;
+		  var thisBookingWidth = baseBookingWidth;
+
+		  passedBookings.forEach((passed) => {
+		      if(timesOverlap(bookingTimeRange, getTimeRange(passed))) {
+			  thisBookingOffset += 6;
+			  thisBookingWidth -= 6;
+		      }
+		  });
+
+		  booking.style.opacity = 0.9;
+		  booking.style.backgroundColor = colors.getNext();
+		  placeElement(booking,
+			       {left: thisBookingOffset,
+				width: thisBookingWidth,
+				top: startPosition,
+				height: bookingHeight});
+
+		  passedBookings.push(booking);
+	      });
+	  }
+
+	  function getTimeRange(element) {
+	      return {start: parseTime(element.attributes.start.value),
+		      end: parseTime(element.attributes.end.value)};
+	  }
+
+	  /*
+	   * Takes a string of the format HH:MM
+	   * Calculates the number of minutes since start of day
+	   * and returns it.
+	   */
+	  function parseTime(timeString) {
+	      const parts = timeString.split(":");
+	      return Number(parts[0]) * 60 + Number(parts[1]);
+	  }
+
+	  function formatTime(totalMinutes) {
+	      const hours = String((totalMinutes / 60).toFixed(0)).padStart(2, "0");
+	      const minutes = String(totalMinutes % 60).padStart(2, "0");
+
+	      return hours + ":" + minutes;
+	  }
+
+	  function timesOverlap(timeRange1, timeRange2) {
+	      const lastStart = Math.max(timeRange1.start, timeRange2.start);
+	      const firstEnd = Math.min(timeRange1.end, timeRange2.end);
+	      const overlap = firstEnd - lastStart;
+	      if(overlap > 0) {
+		  return true;
+	      } else {
+		  return false;
+	      }
+	  }
+
+	  class ScheduleElement extends HTMLElement {
+	      static observedAttributes = ["style"];
+	      
+	      constructor() {
+		  super();
+	      }
+
+	      attributeChangedCallback(name, value, newValue) {
+		  this.redraw();
+	      }
+
+	      connectedCallback() {
+		  const content = document.createElement("div");
+		  const background = document.createElement("div");
+		  const header = document.createElement("div");
+		  const styleElement = document.createElement("style");
+		  const hoverStyle = `booking:hover { z-index: 300 }`;
+
+		  styleElement.appendChild(document.createTextNode(hoverStyle));
+		  document.querySelector('head').appendChild(styleElement);
+
+		  content.id = "schedule-content";
+		  content.style.position = "absolute";
+		  content.style.left = "4em";
+		  content.style.top = "2em";
+		  content.style.width = "calc(100% - 4em)";
+		  content.style.height = "calc(100% - 2em - 2px)";
+		  this.insertBefore(content, this.firstChild);
+
+		  background.id = "schedule-background";
+		  background.style.position = "relative";
+		  background.style.borderTop = "1px solid black";
+		  background.style.boxSizing = "border-box";
+		  background.style.width = "100%";
+		  background.style.height = "calc(100% - 2em - 2px)";
+		  this.insertBefore(background, this.firstChild);
+
+		  header.id = "schedule-header";
+		  header.style.position = "relative";
+		  header.style.marginLeft = "4em";
+		  header.style.width = "calc(100% - 4em)";
+		  header.style.height = "2em";
+		  this.insertBefore(header, this.firstChild);
+
+		  this.style.position = "relative";
+		  this.style.display = "inline-block";
+
+		  this.redraw();
+	      }
+
+	      redraw() {
+		  colorIndex = 0;
+
+		  const background = this.querySelector("#schedule-background");
+		  const content = this.querySelector("#schedule-content");
+		  const header = this.querySelector("#schedule-header");
+		  const backgroundBounds = background.getBoundingClientRect();
+		  const contentBounds = content.getBoundingClientRect();
+		  const headerBounds = header.getBoundingClientRect();
+		  const columnRange = getTimeRange(this);
+		  const minuteHeight = contentBounds.height / (columnRange.end - columnRange.start);
+		  const hourHeight = minuteHeight * 60;
+
+		  while(background.firstChild) {
+		      background.removeChild(background.lastChild);
+		  }
+		  while(header.firstChild) {
+		      header.removeChild(header.lastChild);
+		  }
+
+		  for(var minutes = columnRange.start;
+		      minutes < columnRange.end;
+		      minutes += 60) {
+
+		      const hourDiv = document.createElement("div");
+		      const hourDisplay = document.createElement("span");
+		      const minuteOffset = minutes - columnRange.start;
+
+		      hourDiv.style.borderBottom = "1px solid black";
+		      hourDiv.style.boxSizing = "border-box";
+		      placeElement(hourDiv, {left: 0,
+					     width: backgroundBounds.width,
+					     top: minuteOffset * minuteHeight,
+					     height: hourHeight});
+		      background.appendChild(hourDiv);
+
+		      hourDisplay.textContent = formatTime(minutes);
+		      hourDiv.appendChild(hourDisplay);
+		  }
+		  
+		  const rooms = this.querySelectorAll("room");
+		  const columnWidth = contentBounds.width / rooms.length;
+		  const columnHeight = contentBounds.height;
+
+		  var currentColumnIndex = 0;
+		  rooms.forEach((room) => {
+		      const name = document.createElement("div");
+		      name.textContent = room.attributes.name.value;
+		      placeElement(name, {left: currentColumnIndex * columnWidth,
+					  width: columnWidth,
+					  top: 0,
+					  height: headerBounds.height});
+		      header.appendChild(name);
+		      
+		      content.appendChild(room);
+		      drawRoom(room,
+			       columnRange,
+			       {left: currentColumnIndex * columnWidth,
+				width: columnWidth,
+				top: 0,
+				height: columnHeight});
+		      currentColumnIndex += 1;
+		  });
+	      }
+
+	  }
+
+	  document.addEventListener("DOMContentLoaded", (event) => {
+	      customElements.define("schedule-element", ScheduleElement);
+	  });
+      })();
+    </script>
+  </head>
+  <body>
+    <schedule-element start="07:00" end="22:00">
+      <room name="Room 1">
+	<booking start="09:00" end="13:00">
+	  First booking
+	</booking>
+	<booking start="09:10" end="13:00">
+	  Second booking
+	</booking>
+	<booking start="13:00" end="14:00">
+	  Third booking
+	</booking>
+	<booking start="14:30" end="14:40">
+	  Fourth booking
+	</booking>
+      </room>
+      <room name="Room 2">
+	<booking start="09:00" end="10:30">
+	  First booking
+	</booking>
+	<booking start="09:10" end="13:00">
+	  Second booking
+	</booking>
+	<booking start="10:00" end="15:00">
+	  Third booking
+	</booking>
+	<booking start="11:30" end="11:40">
+	  Fourth booking
+	</booking>
+	<booking start="14:30" end="16:40">
+	  Fifth booking
+	</booking>
+      </room>
+    </schedule-element>
+  </body>
+</html>
