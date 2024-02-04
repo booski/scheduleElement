@@ -14,13 +14,12 @@
     <script type="text/JavaScript" defer>
       (function() {
 	  var colorIndex = 0;
-	  const colors = ["red", "yellow", "green", "blue", "cyan", "teal", "gray"];
+	  const colors = ["red", "yellow", "green", "blue", "cyan", "tan", "gray"];
 	  colors.getNext = function nextColor() {
-	      const color = this[colorIndex++]
-	      if(colorIndex > this.length) {
+	      if(colorIndex >= this.length) {
 		  colorIndex = 0;
 	      }
-	      return color;
+	      return this[colorIndex++];
 	  }
 
 	  /*
@@ -43,12 +42,13 @@
 	      const maxHeight = bounds.height;
 	      const maxTime = columnTimeRange.end - columnTimeRange.start;
 	      const minuteHeight = maxHeight / maxTime;
+	      const smallestHeight = minuteHeight * 45;
 	      const baseBookingOffset = 2;
 	      const baseBookingWidth = maxWidth - 4;
-	      const passedBookings = [];
 
 	      bookings.forEach((booking) => {
 		  const bookingTimeRange = getTimeRange(booking);
+		  const overlappingBookings = selectOverlapping(booking, bookings);
 		  const adjustedStartTime = Math.max(0, bookingTimeRange.start - columnTimeRange.start);
 		  const adjustedEndTime = Math.min(bookingTimeRange.end - columnTimeRange.start,
 						   columnTimeRange.end);
@@ -56,25 +56,19 @@
 		  const endPosition = minuteHeight * adjustedEndTime;
 		  const bookingHeight = endPosition - startPosition;
 
-		  var thisBookingOffset = baseBookingOffset;
-		  var thisBookingWidth = baseBookingWidth;
+		  const thisBookingLeftOffset = overlappingBookings.belowCount * 12;
+		  const thisBookingRightOffset = thisBookingLeftOffset + overlappingBookings.aboveCount * 5;
 
-		  passedBookings.forEach((passed) => {
-		      if(timesOverlap(bookingTimeRange, getTimeRange(passed))) {
-			  thisBookingOffset += 6;
-			  thisBookingWidth -= 6;
-		      }
-		  });
-
-		  booking.style.opacity = 0.9;
-		  booking.style.backgroundColor = colors.getNext();
 		  placeElement(booking,
-			       {left: thisBookingOffset,
-				width: thisBookingWidth,
+			       {left: baseBookingOffset + thisBookingLeftOffset,
+				width: baseBookingWidth - thisBookingRightOffset,
 				top: startPosition,
-				height: bookingHeight});
+				height: bookingHeight}); //height is mandatory but will be overwritten
+		  booking.style.height = `max(${bookingHeight}px, 2.1em)`;
+		  booking.style.opacity = 0.9;
+		  booking.style.padding = "0.5em";
 
-		  passedBookings.push(booking);
+		  booking.style.backgroundColor = colors.getNext();
 	      });
 	  }
 
@@ -98,6 +92,32 @@
 	      const minutes = String(totalMinutes % 60).padStart(2, "0");
 
 	      return hours + ":" + minutes;
+	  }
+
+	  function selectOverlapping(booking, bookings) {
+	      const bookingTime = getTimeRange(booking);
+	      const overlapping = [];
+	      var underCount = 0;
+	      var overCount = 0;
+	      var passed = false;
+	      bookings.forEach((otherBooking) => {
+		  if(otherBooking !== booking
+		     && timesOverlap(bookingTime, getTimeRange(otherBooking))) {
+		      overlapping.push(otherBooking);
+		      if(!passed) {
+			  underCount++;
+		      } else {
+			  overCount++;
+		      }
+		  }
+		  if(otherBooking === booking) {
+		      passed = true;
+		  }
+	      });
+	      return {items: overlapping,
+		      length: overlapping.length,
+		      belowCount: underCount,
+		      aboveCount: overCount};
 	  }
 
 	  function timesOverlap(timeRange1, timeRange2) {
@@ -134,9 +154,9 @@
 
 		  content.id = "schedule-content";
 		  content.style.position = "absolute";
-		  content.style.left = "4em";
+		  content.style.left = "3.5em";
 		  content.style.top = "2em";
-		  content.style.width = "calc(100% - 4em)";
+		  content.style.width = "calc(100% - 3.5em)";
 		  content.style.height = "calc(100% - 2em - 2px)";
 		  this.insertBefore(content, this.firstChild);
 
@@ -150,8 +170,8 @@
 
 		  header.id = "schedule-header";
 		  header.style.position = "relative";
-		  header.style.marginLeft = "4em";
-		  header.style.width = "calc(100% - 4em)";
+		  header.style.marginLeft = "3.5em";
+		  header.style.width = "calc(100% - 3.5em)";
 		  header.style.height = "2em";
 		  this.insertBefore(header, this.firstChild);
 
@@ -241,7 +261,8 @@
 	  First booking
 	</booking>
 	<booking start="09:10" end="13:00">
-	  Second booking
+	  <p>Second booking</p>
+	  <a href="example.com">Zoom</a>
 	</booking>
 	<booking start="13:00" end="14:00">
 	  Third booking
